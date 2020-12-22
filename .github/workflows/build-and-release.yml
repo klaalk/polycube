@@ -7,12 +7,15 @@ env:
   DOCKER_IMAGE_NAME: polycube
  
 jobs:
-  release:
-    name: Release
+  build:
+    if: github.event.base_ref == 'refs/heads/master'
+    name: Build Polycube
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.configure.outputs.version }}
+
     strategy:
       matrix:
-        # For docker default mode
         mode: ['default', 'pcn-k8s', 'pcn-iptables']
     steps:
       - name: Checkout
@@ -23,17 +26,11 @@ jobs:
           submodules: true
           persist-credentials: false
 
-      - name: Get the version to be released
+      - name: Get the repo name
         id: configure
         run: |
           echo "::set-output name=version::${GITHUB_REF/refs\/tags\//}"
           echo "::set-output name=repo-name::${{ github.repository_owner }}/polycubebot/${{ env.DOCKER_IMAGE_NAME }}-${{ matrix.mode }}"
-
-      - name: Get the latest Polycube release
-        uses: pozetroninc/github-action-get-latest-release@v0.5.0
-        id: last-release
-        with:
-          repository: ${{ github.repository }}
 
       - name: Set up Docker Buildx
         id: buildx
@@ -71,25 +68,45 @@ jobs:
             cache-from: type=local,src=/tmp/.buildx-cache
             cache-to: type=local,dest=/tmp/.buildx-cache
 
+  release:
+    if: github.event.base_ref == 'refs/heads/master'
+    name: Release Polycube
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          # The changelog generation requires the entire history
+          fetch-depth: 0
+          submodules: true
+          persist-credentials: false
+
+      - name: Get the latest Polycube release
+        uses: pozetroninc/github-action-get-latest-release@v0.5.0
+        id: last-release
+        with:
+          repository: ${{ github.repository }}  
+
       - name: Generate the CHANGELOG
         uses: RiskLedger/generate-changelog@v1.2
         id: changelog
         with:
           from: ${{ steps.last-release.outputs.release }}
-          to: ${{ steps.configure.outputs.version }}
+          to: ${{ needs.build.outputs.version }}
         env:
-          GITHUB_AUTH: ${{ secrets.CR_PAT }}
+          GITHUB_AUTH: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Save the CHANGELOG as a file
         run: |
-          echo "${{ steps.changelog.outputs.changelog }}" > ./CHANGELOG.md
-          sed -i "1s/.*/## Changes since ${{ steps.last-release.outputs.release }}/" ./CHANGELOG.md
+          echo "${{ steps.changelog.outputs.changelog }}" > ./CHANGELOG.md 
+          sed -i "1s/.*/## Changes since tag ${{ steps.last-release.outputs.release }}/" ./CHANGELOG.md
 
       - name: Create the release
         uses: actions/create-release@v1
         with:
-          tag_name: ${{ steps.configure.outputs.version }}
-          release_name: Release ${{ steps.configure.outputs.version }}
+          tag_name: ${{ needs.build.outputs.version }}
+          release_name: Release ${{ needs.build.outputs.version }}
           body_path: ./CHANGELOG.md
         env:
-          GITHUB_TOKEN: ${{ secrets.CR_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
