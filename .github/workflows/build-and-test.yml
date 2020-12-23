@@ -115,7 +115,7 @@ jobs:
     # Test strategies
     strategy:
       matrix:
-        test: ['default-clean', 'default-same', 'iptables']
+        test: ['default-clean', 'default-same']
         include:
           - test: 'default-clean'
             mode: default
@@ -127,11 +127,6 @@ jobs:
             test-script: run-tests.sh
             relaunch-polycubed: false
             test-mode: SameInstance
-          - test: 'iptables'
-            mode: pcn-iptables
-            test-script: run-tests-iptables.sh
-            relaunch-polycubed: true
-            test-mode: Iptables
 
     steps:
       - uses: actions/checkout@v2
