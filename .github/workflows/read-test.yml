@@ -58,34 +58,9 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
-
-      - name: Upload Test Results
+      - uses: KyleAure/junit-report-annotations-action@1.5
         if: always()
-        uses: actions/upload-artifact@v2
         with:
           name: Test Results (${{ matrix.test }})
           path: ./tests/${{ matrix.test }}.xml
-
-  publish-test-results:
-      name: Publish Results
-      needs: [upload]
-      runs-on: ubuntu-latest
-      if: always()
-      steps:
-        - uses: actions/checkout@v2
-          with:
-            submodules: true
-            persist-credentials: false
-
-        - name: Download Artifacts
-          uses: actions/download-artifact@v2
-          with:
-            path: artifacts
-
-        - name: Report jUnit Annotations as Github Actions Annotations
-          uses: shyim/junit-report-annotations-action@0.2.0
-          if: always()
-          with:
-            accessToken: ${{ secrets.GITHUB_TOKEN }}
-            path: '**/output*.xml'
-
+          access-token: ${{ secrets.GITHUB_TOKEN }}
