@@ -51,7 +51,7 @@ jobs:
     # Test strategies
     strategy:
       matrix:
-        test: ['output1', 'output2']
+        test: ['output1', 'output2', 'output3', 'output4']
 
     steps:
       - uses: actions/checkout@v2
