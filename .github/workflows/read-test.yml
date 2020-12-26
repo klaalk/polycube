@@ -1,0 +1,91 @@
+# This is a basic workflow to help in CI
+name: Read test workflow
+
+# Controls when the action will run. Triggers the workflow on schedule events
+on:
+  push:
+    branches:
+      - dev/**
+
+env:
+  app-name: polycube
+  app-container: polycubed
+
+jobs:
+  # This job deal with retrieving variables for workflow configuration
+  configure:
+    name: Preliminary configuration
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.configure.outputs.ref }}
+      repo-name: ${{ steps.configure.outputs.repo-name }}
+      repo-suffix: ${{ steps.configure.outputs.repo-suffix }}
+      repo-push: ${{ steps.configure.outputs.repo-push }}
+
+    steps:
+      - name: Configure
+        id: configure
+        run: |
+          # The ref of the commit to checkout (do not use the merge commit if pull request)
+          [[ "${{ github.event_name }}" == "pull_request" ]] && \
+            echo "::set-output name=ref::${{ github.event.pull_request.head.sha }}" || \
+            echo "::set-output name=ref::${{ github.sha }}"
+          
+          # The suffix to append to the repository name if not triggered by a push to master
+          [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/master" ]] && \
+            echo "::set-output name=repo-suffix::" || \
+            echo "::set-output name=repo-suffix::-dev"
+          
+          # Do not push the resulting images to DockerHub if triggered by a pull request
+          [[ "${{ github.event_name }}" == "pull_request" ]] && \
+            echo "::set-output name=repo-push::false" || \
+            echo "::set-output name=repo-push::true"
+          
+          echo "::set-output name=repo-name::${{ github.repository_owner }}/polycubebot/${{ env.app-name }}"
+
+  # This job deal with tests
+  upload:
+    name: Upload tests
+    runs-on: ubuntu-latest
+    needs: [configure]
+    # Test strategies
+    strategy:
+      matrix:
+        test: ['output1', 'output2']
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: Test Results (${{ matrix.test }})
+          path: ./tests/${{ matrix.test }}.xml
+
+  publish-test-results:
+      name: Publish Results
+      needs: [upload]
+      runs-on: ubuntu-latest
+      if: always()
+      steps:
+        - uses: actions/checkout@v2
+          with:
+            submodules: true
+            persist-credentials: false
+
+        - name: Download Artifacts
+          uses: actions/download-artifact@v2
+          with:
+            path: artifacts
+
+        - uses: ashley-taylor/junit-report-annotations-action@1.3
+          if: always()
+          with:
+            access-token: ${{ secrets.GITHUB_TOKEN }}
+            path: '**/output*.xml'
+            numFailures: 50
+
