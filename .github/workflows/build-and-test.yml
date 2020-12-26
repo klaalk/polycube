@@ -5,8 +5,7 @@ name: Build & Test Workflow
 on:
   push:
     branches:
-      - dev/**
-      - klc/**
+      - master
 
   pull_request:
     types:
