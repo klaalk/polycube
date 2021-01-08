@@ -115,6 +115,7 @@ jobs:
     needs: [build, configure]
     # Test strategies
     strategy:
+      fail-fast: false
       matrix:
         test: ['default-clean', 'default-same']
         include:
@@ -128,7 +129,11 @@ jobs:
             test-script: run-tests.sh
             relaunch-polycubed: false
             test-mode: SameInstance
-
+          - test: 'iptables'
+            mode: pcn-iptables
+            test-script: run-tests-iptables.sh
+            relaunch-polycubed: false
+            test-mode: Iptables
     steps:
       - uses: actions/checkout@v2
         with:
@@ -140,6 +145,16 @@ jobs:
 
       - name: Setup VirtualEnv
         run: python3 -m pip install --user virtualenv
+
+      - name: Setup JUnitParser
+        run: python3 -m pip install --user junitparser
+
+      # Install additional tools that are required in the testing phase
+      # - nmap: some tests use 'nping', which is included in this package
+      - name: Setup additional testing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install nmap
 
       - name: Docker login to GitHub registry
         uses: docker/login-action@v1
@@ -165,12 +180,7 @@ jobs:
           $polycubed /bin/sleep infinity
           ./CI/extract_from_docker_image.sh ${{ env.app-container }}
           $KILL_COMMAND
-        
-      - name: Run Docker
-        run: |
-          $polycubed
-          docker ps
-        
+
       - name: Run Tests
         run: |
           cd tests/
@@ -186,31 +196,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v2
         with:
-          name: Test Results (${{ matrix.test }})
+          name: test_results_${{ matrix.test }}
           path: ./tests/output.xml
-          
+
+      - name: Publish Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v1
+        with:
+          report_paths: ./tests/output.xml
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          check_name: Test Results (${{ matrix.test }})
+
+      - name: Check job status
+        if: always()
+        run: python3 ./tests/check_tests.py ./tests/output.xml
+
       - name: Clean
+        if: always()
         run: ./CI/clean_slave.sh
-
-  publish-test-results:
-      name: Publish Results
-      needs: [test]
-      runs-on: ubuntu-latest
-      if: always()
-      steps:
-        - uses: actions/checkout@v2
-          with:
-            submodules: true
-            persist-credentials: false
-
-        - name: Download Artifacts
-          uses: actions/download-artifact@v2
-          with:
-            path: artifacts
-
-        - uses: ashley-taylor/junit-report-annotations-action@1.3
-          if: always()
-          with:
-            access-token: ${{ secrets.GITHUB_TOKEN }}
-            path: '**/output*.xml'
-
